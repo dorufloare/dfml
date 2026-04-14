@@ -9,5 +9,6 @@
 #include "dfml/ops/activation/tanh.hpp"
 #include "dfml/ops/activation/softmax.hpp"
 
+#include "dfml/ops/loss/loss_fn.hpp"
 #include "dfml/ops/loss/mse_loss.hpp"
 #include "dfml/ops/loss/cross_entropy_loss.hpp"

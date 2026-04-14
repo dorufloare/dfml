@@ -93,4 +93,17 @@ Tensor<T> cross_entropy_loss(const Tensor<T>& logits, const std::vector<size_t>&
     return result;
 }
 
+template<typename T>
+Tensor<T> cross_entropy_loss(const Tensor<T>& logits, std::initializer_list<size_t> labels) {
+    return cross_entropy_loss(logits, std::vector<size_t>(labels));
+}
+
+template<typename T>
+Tensor<T> cross_entropy_loss(const Tensor<T>& logits, const Tensor<T>& labels) {
+    std::vector<size_t> idx(labels.nr_elements());
+    for (size_t i = 0; i < labels.nr_elements(); ++i)
+        idx[i] = static_cast<size_t>(labels[i]);
+    return cross_entropy_loss(logits, idx);
+}
+
 } //namespace dfml::ops

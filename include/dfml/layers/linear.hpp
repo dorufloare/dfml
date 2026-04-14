@@ -1,6 +1,7 @@
 #pragma once
  
 #include "dfml/layers/layer.hpp"
+#include "dfml/init/init.hpp"
 
 namespace dfml::layers {
 
@@ -28,17 +29,8 @@ public:
 
 private:
     void init_weights() {
-        //He initialization: std = sqrt(2 / in)
-
-        std::mt19937 rng(std::random_device{}());
-        std::normal_distribution<float> dist(0.f, std::sqrt(2.f / static_cast<float>(in_features_)));
-
-        float* weights_ptr = weights_.data();
-        for (size_t i = 0; i < weights_.nr_elements(); ++i) {
-            weights_ptr[i] = dist(rng);
-        }
-
-        biases_.zero();
+        init::xavier_normal(weights_, in_features_, out_features_);
+        init::zeros(biases_);
     }
 
     size_t in_features_;
