@@ -4,6 +4,7 @@
 #include "dfml/layers/layers.hpp"
 #include "dfml/optim/optim.hpp"
 #include "dfml/autograd/grad_guard.hpp"
+#include "dfml/data/data_loader.hpp"
 #include <iostream>
 
 namespace dfml {
@@ -20,21 +21,51 @@ public:
 
     }
 
-    Tensor<float> fit(const Tensor<float>& X, const Tensor<float>& Y, size_t epochs, size_t print_every = 100) {
-        for (size_t epoch = 1; epoch <= epochs; ++epoch) {
-            auto prediction = model_.forward(X);
-            auto loss = loss_fn_(prediction, Y);
-            loss.backward();
-            optimizer_.step();
-            optimizer_.zero_grad();
-            if (epoch % print_every == 0) {
-                std::cout << "epoch " << epoch << "  loss: " << loss.data()[0];
-                for (auto& [name, fn] : metrics_)
-                    std::cout << "  " << name << ": " << fn(prediction, Y);
-                std::cout << "\n";
+    void print_metrics(size_t epoch, const Tensor<float>& pred, const Tensor<float>& Y, float loss_val) {
+        std::cout << "epoch " << epoch << "  loss: " << loss_val;
+        for (auto& [name, fn] : metrics_)
+            std::cout << "  " << name << ": " << fn(pred, Y);
+        std::cout << "\n";
+    }
+
+    void print_metrics(size_t epoch, const Tensor<float>& X, const Tensor<float>& Y) {
+        GradGuard guard;
+        auto pred = model_.forward(X);
+        auto loss = loss_fn_(pred, Y);
+        print_metrics(epoch, pred, Y, loss.data()[0]);
+    }
+
+    Tensor<float> fit(const Tensor<float>& X, const Tensor<float>& Y, size_t epochs, size_t batch_size = 0, size_t print_every = 100) {
+        if (batch_size == 0) {
+            for (size_t epoch = 1; epoch <= epochs; ++epoch) {
+                optimizer_.zero_grad();
+                auto prediction = model_.forward(X);
+                auto loss = loss_fn_(prediction, Y);
+                loss.backward();
+                optimizer_.step();
+
+                if (epoch % print_every == 0) {
+                    print_metrics(epoch, prediction, Y, loss.data()[0]);
+                }
+            }
+        } else {
+            for (size_t epoch = 1; epoch <= epochs; ++epoch) {
+                DataLoader<float> loader(X, Y, batch_size, true);
+                for (const auto& [X_batch, Y_batch] : loader) {
+                    optimizer_.zero_grad();
+                    auto prediction = model_.forward(X_batch);
+                    auto loss = loss_fn_(prediction, Y_batch);
+                    loss.backward();
+                    optimizer_.step();
+                }
+
+                if (epoch % print_every == 0) {
+                    print_metrics(epoch, X, Y);
+                }
             }
         }
-        dfml::GradGuard guard;  
+        
+        GradGuard guard;  
         return model_.forward(X);
     }
 

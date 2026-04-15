@@ -70,6 +70,25 @@ public:
 
     size_t nr_elements() const noexcept { return storage_->size(); }
 
+    TensorImpl<T> index_select(const std::vector<size_t>& indices) const {
+        size_t n = indices.size();
+        size_t row_stride = nr_elements() / size(0);
+
+        std::vector<size_t> new_shape = shape();
+        new_shape[0] = n;
+
+        TensorImpl<T> out(new_shape);
+
+        for (size_t i = 0; i < n; ++i) {
+            std::copy(
+                data() + indices[i] * row_stride,
+                data() + indices[i] * row_stride + row_stride,
+                out.data() + i * row_stride
+            );
+        }
+        return out;
+    }
+
     // DATA ACCESS
     T operator[](size_t i) const { return (*storage_)[i]; }
     T& operator[](size_t i) { return (*storage_)[i]; }

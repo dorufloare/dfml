@@ -50,11 +50,23 @@ public:
     const Storage<T>& get_storage() const noexcept { return impl_->get_storage(); }
     void set_storage(const Storage<T>& storage) { impl_->set_storage(storage); }
 
+    Tensor<T> index_select(const std::vector<size_t>& indices) const {
+        return Tensor<T>(std::make_shared<TensorImpl<T>>(impl_->index_select(indices)));
+    }
+
     T operator[](size_t i) const { return (*impl_)[i]; }
     T& operator[](size_t i) { return (*impl_)[i]; }
 
+    T& at(std::initializer_list<size_t> position) { 
+        return at(std::span<const size_t>(position.begin(), position.size())); 
+    }
+    const T& at(std::initializer_list<size_t> position) const { 
+        return at(std::span<const size_t>(position.begin(), position.size())); 
+    }
+
     T& at(std::span<const size_t> position) { return impl_->at(position); }
     const T& at(std::span<const size_t> position) const { return impl_->at(position); }
+    
 
     Tensor view(std::span<const size_t> new_shape) const { return Tensor(impl_->view(new_shape)); }
     Tensor view(std::initializer_list<size_t> new_shape) const {
