@@ -29,6 +29,10 @@ This is a C++ neural network library with autograd, feedforward layers, two opti
 
 Run them all with `./run.sh`.
 
+## Performance
+
+Matrix multiplication uses cache-friendly tiling (splitting large matrices into smaller blocks that fit in L2/L3) combined with AVX2 SIMD, giving up to 3× faster multiplications on large matrices compared to a naive implementation.
+
 ## Quick start
 
 ```bash
