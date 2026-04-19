@@ -18,9 +18,9 @@ target_include_directories(dfml
 )
 
 if(MSVC)
-	target_compile_options(dfml PRIVATE /W4 /permissive-)
+	target_compile_options(dfml PRIVATE /W4 /permissive- /O2 /arch:AVX2)
 else()
-	target_compile_options(dfml PRIVATE -Wall -Wextra -Wpedantic)
+	target_compile_options(dfml PRIVATE -Wall -Wextra -Wpedantic -O3 -mavx2 -mfma)
 endif()
 
 include(CTest)

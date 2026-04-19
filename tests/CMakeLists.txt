@@ -1,3 +1,10 @@
+if(MSVC)
+    add_compile_options(/O2 /arch:AVX2 /openmp)
+else()
+    add_compile_options(-O3 -mavx2 -mfma -fopenmp)
+    link_libraries(-fopenmp)
+endif()
+
 add_executable(tensor_test
     tensor_test.cpp
 )

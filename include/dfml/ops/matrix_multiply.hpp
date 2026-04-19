@@ -10,7 +10,7 @@ namespace dfml::ops {
 
 constexpr size_t TILE_K = 256;  // large K -> B column stays in L1
 constexpr size_t TILE_M = 32;   // small M -> A panel (32*256=8KB) fits in L2
-constexpr size_t TILE_N = 128;  // wide N — B panel (256*128=128KB) fits in L3
+constexpr size_t TILE_N = 128;  // wide N -> B panel (256*128=128KB) fits in L3
 constexpr size_t MR = 4;        // rows processed simultaneously in the micro-kernel
 
 __attribute__((always_inline)) void inner_kernel(
@@ -92,7 +92,7 @@ __attribute__((always_inline)) void inner_kernel(
 }
 
 template<typename T>
-Tensor<T> matrix_multiply_avx2_tiled(const Tensor<T>& a, const Tensor<T>& b) {
+Tensor<T> matrix_multiply_avx2_tiled(const Tensor<T>& a, const Tensor<T>& b, bool parallelize = true) {
     const size_t M = a.size(0);
     const size_t K = a.size(1);
     const size_t N = b.size(1);
@@ -106,9 +106,10 @@ Tensor<T> matrix_multiply_avx2_tiled(const Tensor<T>& a, const Tensor<T>& b) {
     if constexpr (std::is_same_v<T, float>) {
         for (size_t k0 = 0; k0 < K; k0 += TILE_K) {
             size_t k_end = std::min(k0 + TILE_K, K);
+            #pragma omp parallel for collapse(2) schedule(dynamic) if(parallelize)
             for (size_t i0 = 0; i0 < M; i0 += TILE_M) {
-                size_t i_end = std::min(i0 + TILE_M, M);
                 for (size_t j0 = 0; j0 < N; j0 += TILE_N) {
+                    size_t i_end = std::min(i0 + TILE_M, M);
                     size_t j_end = std::min(j0 + TILE_N, N);
                     inner_kernel(a_ptr, b_ptr, c_ptr, K, N, i0, k0, j0, i_end, k_end, j_end);
                 }
@@ -142,7 +143,7 @@ Tensor<T> matrix_multiply_avx2_tiled(const Tensor<T>& a, const Tensor<T>& b) {
         // weak_ptr<TensorImpl> instead of Tensor to solve circularity
         const auto c_weak = c.make_weak_tensor();
 
-        c.set_backward_function([a_graph, b_graph, c_weak, M, K, N]() mutable {
+        c.set_backward_function([a_graph, b_graph, c_weak, M, K, N, parallelize]() mutable {
             auto c_locked = Tensor<T>::lock_weak_tensor(c_weak);
             if (!c_locked.has_value()) return;
 
@@ -154,13 +155,12 @@ Tensor<T> matrix_multiply_avx2_tiled(const Tensor<T>& a, const Tensor<T>& b) {
                 Tensor<T> dA({M, K});
                 dA.zero();
                 T* dA_ptr = dA.data();
-                for (size_t i = 0; i < M; ++i) {
-                    for (size_t k = 0; k < K; ++k) {
-                        for (size_t j = 0; j < N; ++j) {
+                // safe to parallelize over i: each i writes to a distinct row of dA
+                #pragma omp parallel for schedule(dynamic) if(parallelize)
+                for (size_t i = 0; i < M; ++i)
+                    for (size_t k = 0; k < K; ++k)
+                        for (size_t j = 0; j < N; ++j)
                             dA_ptr[i * K + k] += dc_ptr[i * N + j] * b_graph_ptr[k * N + j];
-                        }
-                    }
-                }
                 a_graph.accumulate_grad(dA);
             }
 
@@ -168,9 +168,11 @@ Tensor<T> matrix_multiply_avx2_tiled(const Tensor<T>& a, const Tensor<T>& b) {
                 Tensor<T> dB({K, N});
                 dB.zero();
                 T* dB_ptr = dB.data();
-                
-                for (size_t i = 0; i < M; ++i)
-                    for (size_t k = 0; k < K; ++k) {
+                // parallelize over k: each k writes to a distinct row of dB
+                // (cannot parallelize over i bcs multiple i values accumulate into the same dB[k][j])
+                #pragma omp parallel for schedule(dynamic) if(parallelize)
+                for (size_t k = 0; k < K; ++k)
+                    for (size_t i = 0; i < M; ++i) {
                         T a_val = a_graph_ptr[i * K + k];
                         for (size_t j = 0; j < N; ++j)
                             dB_ptr[k * N + j] += a_val * dc_ptr[i * N + j];
@@ -186,7 +188,7 @@ Tensor<T> matrix_multiply_avx2_tiled(const Tensor<T>& a, const Tensor<T>& b) {
 }
 
 template<typename T>
-Tensor<T> matrix_multiply_avx2(const Tensor<T>& a, const Tensor<T>& b) {
+Tensor<T> matrix_multiply_avx2(const Tensor<T>& a, const Tensor<T>& b, bool parallelize = true) {
     const size_t M = a.size(0);
     const size_t K = a.size(1);
     const size_t N = b.size(1);
@@ -241,7 +243,7 @@ Tensor<T> matrix_multiply_avx2(const Tensor<T>& a, const Tensor<T>& b) {
         // weak_ptr<TensorImpl> instead of Tensor to solve circularity
         const auto c_weak = c.make_weak_tensor();
 
-        c.set_backward_function([a_graph, b_graph, c_weak, M, K, N]() mutable {
+        c.set_backward_function([a_graph, b_graph, c_weak, M, K, N, parallelize]() mutable {
             auto c_locked = Tensor<T>::lock_weak_tensor(c_weak);
             if (!c_locked.has_value()) return;
 
@@ -253,13 +255,12 @@ Tensor<T> matrix_multiply_avx2(const Tensor<T>& a, const Tensor<T>& b) {
                 Tensor<T> dA({M, K});
                 dA.zero();
                 T* dA_ptr = dA.data();
-                for (size_t i = 0; i < M; ++i) {
-                    for (size_t k = 0; k < K; ++k) {
-                        for (size_t j = 0; j < N; ++j) {
+           
+                #pragma omp parallel for schedule(dynamic) if(parallelize)
+                for (size_t i = 0; i < M; ++i)
+                    for (size_t k = 0; k < K; ++k)
+                        for (size_t j = 0; j < N; ++j)
                             dA_ptr[i * K + k] += dc_ptr[i * N + j] * b_graph_ptr[k * N + j];
-                        }
-                    }
-                }
                 a_graph.accumulate_grad(dA);
             }
 
@@ -267,9 +268,10 @@ Tensor<T> matrix_multiply_avx2(const Tensor<T>& a, const Tensor<T>& b) {
                 Tensor<T> dB({K, N});
                 dB.zero();
                 T* dB_ptr = dB.data();
-                
-                for (size_t i = 0; i < M; ++i)
-                    for (size_t k = 0; k < K; ++k) {
+              
+                #pragma omp parallel for schedule(dynamic) if(parallelize)
+                for (size_t k = 0; k < K; ++k)
+                    for (size_t i = 0; i < M; ++i) {
                         T a_val = a_graph_ptr[i * K + k];
                         for (size_t j = 0; j < N; ++j)
                             dB_ptr[k * N + j] += a_val * dc_ptr[i * N + j];
@@ -285,7 +287,7 @@ Tensor<T> matrix_multiply_avx2(const Tensor<T>& a, const Tensor<T>& b) {
 }
 
 template<typename T>
-Tensor<T> matrix_multiply_naive(const Tensor<T>& a, const Tensor<T>& b) {
+Tensor<T> matrix_multiply_naive(const Tensor<T>& a, const Tensor<T>& b, bool parallelize = true) {
     const size_t M = a.size(0);
     const size_t K = a.size(1);
     const size_t N = b.size(1);
@@ -297,6 +299,7 @@ Tensor<T> matrix_multiply_naive(const Tensor<T>& a, const Tensor<T>& b) {
     T* c_ptr = c.data();
 
     // c = a * b
+    #pragma omp parallel for schedule(dynamic) if(parallelize)
     for (size_t i = 0; i < M; ++i) {
         for (size_t k = 0; k < K; ++k) {
             T a_val = a_ptr[i * K + k];
@@ -325,7 +328,7 @@ Tensor<T> matrix_multiply_naive(const Tensor<T>& a, const Tensor<T>& b) {
         // weak_ptr<TensorImpl> instead of Tensor to solve circularity
         const auto c_weak = c.make_weak_tensor();
 
-        c.set_backward_function([a_graph, b_graph, c_weak, M, K, N]() mutable {
+        c.set_backward_function([a_graph, b_graph, c_weak, M, K, N, parallelize]() mutable {
             auto c_locked = Tensor<T>::lock_weak_tensor(c_weak);
             if (!c_locked.has_value()) return;
 
@@ -337,13 +340,12 @@ Tensor<T> matrix_multiply_naive(const Tensor<T>& a, const Tensor<T>& b) {
                 Tensor<T> dA({M, K});
                 dA.zero();
                 T* dA_ptr = dA.data();
-                for (size_t i = 0; i < M; ++i) {
-                    for (size_t k = 0; k < K; ++k) {
-                        for (size_t j = 0; j < N; ++j) {
+               
+                #pragma omp parallel for schedule(dynamic) if(parallelize)
+                for (size_t i = 0; i < M; ++i)
+                    for (size_t k = 0; k < K; ++k)
+                        for (size_t j = 0; j < N; ++j)
                             dA_ptr[i * K + k] += dc_ptr[i * N + j] * b_graph_ptr[k * N + j];
-                        }
-                    }
-                }
                 a_graph.accumulate_grad(dA);
             }
 
@@ -351,9 +353,10 @@ Tensor<T> matrix_multiply_naive(const Tensor<T>& a, const Tensor<T>& b) {
                 Tensor<T> dB({K, N});
                 dB.zero();
                 T* dB_ptr = dB.data();
-                
-                for (size_t i = 0; i < M; ++i)
-                    for (size_t k = 0; k < K; ++k) {
+             
+                #pragma omp parallel for schedule(dynamic) if(parallelize)
+                for (size_t k = 0; k < K; ++k)
+                    for (size_t i = 0; i < M; ++i) {
                         T a_val = a_graph_ptr[i * K + k];
                         for (size_t j = 0; j < N; ++j)
                             dB_ptr[k * N + j] += a_val * dc_ptr[i * N + j];
@@ -369,23 +372,24 @@ Tensor<T> matrix_multiply_naive(const Tensor<T>& a, const Tensor<T>& b) {
 }
 
 
-
 template<typename T>
-Tensor<T> matrix_multiply(const Tensor<T>& a, const Tensor<T>& b) {
-    if (a.nr_dimensions() != 2 || b.nr_dimensions() != 2) {
+Tensor<T> matrix_multiply(const Tensor<T>& a, const Tensor<T>& b, bool can_parallelize = true, bool force_parallelize = false) {
+    if (a.nr_dimensions() != 2 || b.nr_dimensions() != 2)
         throw std::invalid_argument("matrix_multiply: inputs must be 2D");
-    }
-    if (a.size(1) != b.size(0)) {
+    if (a.size(1) != b.size(0))
         throw std::invalid_argument("matrix_multiply: input dimensions must match");
-    }
 
     const size_t N = b.size(1);
+    constexpr size_t PARALLEL_THRESHOLD = 512;  // parallel wins at N >= 512 per benchmarks
+
+    const bool parallelize = force_parallelize || (can_parallelize && N >= PARALLEL_THRESHOLD);
+
     if (N >= 1024)
-        return matrix_multiply_avx2_tiled(a, b);  
+        return matrix_multiply_avx2_tiled(a, b, parallelize);
     else if (N >= 128)
-        return matrix_multiply_avx2(a, b);        
+        return matrix_multiply_avx2(a, b, parallelize);
     else
-        return matrix_multiply_naive(a, b);      
+        return matrix_multiply_naive(a, b, parallelize);
 }
 
 } //namespace dfml::ops

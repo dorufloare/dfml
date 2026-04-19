@@ -31,7 +31,22 @@ Run them all with `./run.sh`.
 
 ## Performance
 
-Matrix multiplication uses cache-friendly tiling (splitting large matrices into smaller blocks that fit in L2/L3) combined with AVX2 SIMD, giving up to 3× faster multiplications on large matrices compared to a naive implementation.
+Matrix multiplication uses cache-friendly tiling (splitting large matrices into smaller blocks that fit in L2/L3) combined with AVX2 SIMD and optional OpenMP parallelization. At 4096×4096 the tiled parallel path is ~12× faster than naive.
+
+```
+Size      naive       tiled       naive_parallel  tiled_parallel
+------------------------------------------------------------------
+32             0.01 ms     0.01 ms         0.09 ms         0.07 ms
+64             0.02 ms     0.02 ms         0.11 ms         0.09 ms
+128            0.17 ms     0.12 ms         0.24 ms         0.10 ms
+256            0.72 ms     0.60 ms         0.81 ms         0.87 ms
+512            6.77 ms     4.67 ms         2.70 ms         1.57 ms
+1024          81.97 ms    41.36 ms        17.84 ms        12.01 ms
+2048         873.10 ms   424.58 ms       121.29 ms        97.59 ms
+4096       11864.53 ms  4947.43 ms      1895.94 ms       992.08 ms
+```
+
+Note: parallelization adds overhead at small sizes (< 512) due to thread spawn cost — the dispatcher skips it there automatically.
 
 ## Quick start
 

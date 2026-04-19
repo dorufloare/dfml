@@ -38,24 +38,24 @@ static double bench(MatmulFn fn, size_t M, size_t K, size_t N, int reps = 5) {
 int main() {
     std::cout << std::left
               << std::setw(10) << "Size"
-              << std::setw(12) << "dispatch"
               << std::setw(12) << "naive"
-              << std::setw(12) << "avx2"
-              << std::setw(12) << "avx2_tiled"
-              << "\n" << std::string(58, '-') << "\n";
+              << std::setw(12) << "tiled"
+              << std::setw(16) << "naive_parallel"
+              << std::setw(16) << "tiled_parallel"
+              << "\n" << std::string(66, '-') << "\n";
 
     for (size_t sz : {32u, 64u, 128u, 256u, 512u, 1024u, 2048u, 4096u}) {
-        double d0 = dfml::bench(dfml::ops::matrix_multiply<float>,           sz, sz, sz);
-        double d1 = dfml::bench(dfml::ops::matrix_multiply_naive<float>,     sz, sz, sz);
-        double d2 = dfml::bench(dfml::ops::matrix_multiply_avx2<float>,      sz, sz, sz);
-        double d3 = dfml::bench(dfml::ops::matrix_multiply_avx2_tiled<float>,sz, sz, sz);
+        double d0 = dfml::bench([](auto& a, auto& b){ return dfml::ops::matrix_multiply_naive(a, b, false); },       sz, sz, sz);
+        double d1 = dfml::bench([](auto& a, auto& b){ return dfml::ops::matrix_multiply_avx2_tiled(a, b, false); },  sz, sz, sz);
+        double d2 = dfml::bench([](auto& a, auto& b){ return dfml::ops::matrix_multiply_naive(a, b, true); },        sz, sz, sz);
+        double d3 = dfml::bench([](auto& a, auto& b){ return dfml::ops::matrix_multiply_avx2_tiled(a, b, true); },   sz, sz, sz);
 
         std::cout << std::left  << std::setw(10) << sz
                   << std::right << std::fixed << std::setprecision(2)
                   << std::setw(9)  << d0 << " ms"
                   << std::setw(9)  << d1 << " ms"
-                  << std::setw(9)  << d2 << " ms"
-                  << std::setw(9)  << d3 << " ms"
+                  << std::setw(13) << d2 << " ms"
+                  << std::setw(13) << d3 << " ms"
                   << "\n";
     }
 }
