@@ -94,6 +94,14 @@ public:
     // backward function
     void set_backward_function(const std::function<void()>& fn) { impl_->set_backward_function(fn); }
 
+    void add_grad_preallocated_workspace(Tensor<T> tensor) {
+        impl_->add_grad_preallocated_workspace(tensor);
+    }
+
+    Tensor<T> get_grad_preallocated_workspace(size_t index) {
+        return impl_->get_grad_preallocated_workspace(index);
+    }
+
     void backward() {
         if (!has_grad())
             accumulate_grad(Tensor<T>::scalar(T{1}));

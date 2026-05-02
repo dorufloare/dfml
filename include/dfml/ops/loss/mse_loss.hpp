@@ -30,8 +30,10 @@ Tensor<T> mse_loss(const Tensor<T>& prediction, const Tensor<T>& target) {
 
     if (require_grad) {
         Tensor<T> prediction_graph = prediction;
-        
+
         result.set_previous_tensors({prediction_graph});
+
+        result.add_grad_preallocated_workspace(Tensor<T>(prediction_graph.shape()));
 
         const auto result_weak = result.make_weak_tensor();
 
@@ -41,7 +43,7 @@ Tensor<T> mse_loss(const Tensor<T>& prediction, const Tensor<T>& target) {
 
             const T upstream = result_locked->grad()[0];
 
-            Tensor<T> dpred(prediction_graph.shape());
+            Tensor<T> dpred = result_locked->get_grad_preallocated_workspace(0);
             T* dpred_ptr = dpred.data();
             const T* prediction_ptr = prediction_graph.data();
             const T* target_ptr = target.data();

@@ -106,6 +106,16 @@ void TensorImpl<T>::accumulate_grad(const Tensor<T>& delta) {
 	}
 }
 
+template<typename T>
+void TensorImpl<T>::add_grad_preallocated_workspace(const Tensor<T>& tensor) {
+	this->autograd_metadata_->grad_preallocated_workspaces.push_back(tensor);
+}
+
+template<typename T>
+Tensor<T> TensorImpl<T>::get_grad_preallocated_workspace(size_t index) {
+	return this->autograd_metadata_->grad_preallocated_workspaces[index];
+}
+
 template <typename T>
 AutogradMetadata<T>* TensorImpl<T>::autograd_metadata() noexcept {
 	return autograd_metadata_.get();

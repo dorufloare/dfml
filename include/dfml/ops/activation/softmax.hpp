@@ -45,6 +45,8 @@ Tensor<T> softmax(const Tensor<T>& a) {
 
         result.set_previous_tensors({a_graph});
 
+        result.add_grad_preallocated_workspace(Tensor<T>(a_graph.shape()));
+
         const auto result_weak = result.make_weak_tensor();
 
         result.set_backward_function([a_graph, N, M, result_weak]() mutable {
@@ -54,7 +56,7 @@ Tensor<T> softmax(const Tensor<T>& a) {
             const T* dr_ptr = result_locked->grad().data();
             const T* r_ptr = result_locked->data();
 
-            Tensor<T> dA(a_graph.shape());
+            Tensor<T> dA = result_locked->get_grad_preallocated_workspace(0);
             T* da_ptr = dA.data();
 
             for (size_t i = 0; i < M; ++i) {

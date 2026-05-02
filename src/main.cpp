@@ -1,4 +1,5 @@
 #include <iostream>
+#include <chrono>
 #include "dfml/dfml.hpp"
 
 void train_xor() {
@@ -116,7 +117,7 @@ void train_fn(std::function<float(float)> fn) {
     trainer.add_metric("mse", dfml::mse);
     trainer.add_metric("mae", dfml::mae);
 
-    auto train_pred = trainer.fit(X_train, Y_train, 5000, 0, 500);
+    auto train_pred = trainer.fit(X_train, Y_train, 1000, 0, 500);
 
     auto test_pred = trainer.predict(X_test);
 
@@ -133,10 +134,59 @@ void train_fn(std::function<float(float)> fn) {
 }
 
 
+// hits the tiled matmul path (N >= 1024) on every Linear layer, both forward and backward.
+void bench_wide_mlp() {
+    const size_t B = 512;     // batch
+    const size_t D = 2048;    // input/output dim
+    const size_t H = 4096;   // hidden dim
+    const size_t epochs = 5;
+    const size_t batch_size = 64;
+
+    std::uniform_real_distribution<float> dist(-1.f, 1.f);
+    std::vector<float> X_data(B * D), Y_data(B * D);
+    for (auto& v : X_data) v = dist(dfml::global_rng());
+    for (auto& v : Y_data) v = dist(dfml::global_rng());
+
+    dfml::Tensor<float> X({B, D}, X_data);
+    dfml::Tensor<float> Y({B, D}, Y_data);
+
+    dfml::layers::Sequential model;
+    model.add<dfml::layers::Linear>(D, H);
+    model.add<dfml::layers::ReLU>();
+    model.add<dfml::layers::Linear>(H, H);
+    model.add<dfml::layers::ReLU>();
+    model.add<dfml::layers::Linear>(H, D);
+
+    dfml::optim::SGD optimizer(model.parameters());
+    dfml::ops::LossFn loss_fn(dfml::ops::mse_loss<float>);
+    dfml::Trainer trainer(model, optimizer, loss_fn);
+
+    auto t0 = std::chrono::steady_clock::now();
+    trainer.fit(X, Y, epochs, batch_size, epochs);
+    auto t1 = std::chrono::steady_clock::now();
+
+    double secs = std::chrono::duration<double>(t1 - t0).count();
+    size_t steps = epochs * ((B + batch_size - 1) / batch_size);
+
+    auto matmul_flops = [](size_t m, size_t k, size_t n) { return 2.0 * m * k * n; };
+    double flops_per_step =
+        3.0 * (matmul_flops(batch_size, D, H) +
+               matmul_flops(batch_size, H, H) +
+               matmul_flops(batch_size, H, D));
+    double gflops = (flops_per_step * steps) / secs / 1e9;
+
+    std::cout << "elapsed: " << secs << " s ("
+              << (secs * 1000.0 / steps) << " ms/step, "
+              << gflops << " GFLOP/s effective)\n";
+}
+
 int main() {
     dfml::set_rng_seed(42);
 
-    std::cout << "=== XOR ===\n";
+    std::cout << "=== Wide MLP benchmark ===\n";
+    bench_wide_mlp();
+
+    std::cout << "\n=== XOR ===\n";
     train_xor();
 
     std::cout << "\n=== Circle ===\n";

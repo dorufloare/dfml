@@ -60,8 +60,10 @@ Tensor<T> cross_entropy_loss(const Tensor<T>& logits, const std::vector<size_t>&
 
     if (require_grad) {
         Tensor<T> logits_graph = logits;
-        
+
         result.set_previous_tensors({logits_graph});
+
+        result.add_grad_preallocated_workspace(Tensor<T>(logits_graph.shape()));
 
         const auto result_weak = result.make_weak_tensor();
 
@@ -71,7 +73,7 @@ Tensor<T> cross_entropy_loss(const Tensor<T>& logits, const std::vector<size_t>&
 
             const T upstream = result_locked->grad()[0];
 
-            Tensor<T> dlogits(logits_graph.shape());
+            Tensor<T> dlogits = result_locked->get_grad_preallocated_workspace(0);
             T* dlogits_ptr = dlogits.data();
             const T inv_M = upstream / static_cast<T>(M);
             const size_t N = logits_graph.size(1);

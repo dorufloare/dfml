@@ -17,6 +17,9 @@ target_include_directories(dfml
         ${CMAKE_CURRENT_SOURCE_DIR}/include
 )
 
+find_package(OpenMP REQUIRED)
+target_link_libraries(dfml PRIVATE OpenMP::OpenMP_CXX)
+
 if(MSVC)
 	target_compile_options(dfml PRIVATE /W4 /permissive- /O2 /arch:AVX2)
 else()

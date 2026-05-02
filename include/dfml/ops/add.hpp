@@ -78,15 +78,17 @@ Tensor<T> add_bias_to_matrix(const Tensor<T>& a, const Tensor<T>& b) {
 
         result.set_previous_tensors({a_graph, b_graph});
 
+        result.add_grad_preallocated_workspace({N});
+
         result.set_backward_function([a_graph, b_graph, M, N, result_weak]() mutable {
             auto result_locked = Tensor<T>::lock_weak_tensor(result_weak);
             if (!result_locked.has_value()) return;
-            
+
             if (a_graph.requires_grad()) a_graph.accumulate_grad(result_locked->grad());
 
             if (b_graph.requires_grad()) {
                 // dL / dB[j] = sum(dL / dR[i][j], i=0..M)
-                Tensor<T> dB({N});
+                Tensor<T> dB = result_locked->get_grad_preallocated_workspace(0);
                 dB.zero();
 
                 T* db_ptr = dB.data();

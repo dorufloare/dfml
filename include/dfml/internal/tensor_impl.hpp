@@ -139,6 +139,9 @@ public:
     const std::vector<Tensor<T>>& previous_tensors() const;
     void set_previous_tensors(const std::vector<Tensor<T>>& tensors);
 
+    void add_grad_preallocated_workspace(const Tensor<T>& tensor);
+    Tensor<T> get_grad_preallocated_workspace(size_t index);
+
     // backward function
     void set_backward_function(const std::function<void()>& fn);
     void backward();
